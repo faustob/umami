@@ -1,12 +1,24 @@
 import { getQueryFilters, parseRequest, setWebsiteDate } from '@/lib/request';
 import { json, unauthorized } from '@/lib/response';
 import { reportResultSchema } from '@/lib/schema';
+import { type FlowContext, recordValidationOutcome, withReportFlow } from '@/lib/telemetry';
 import { canViewWebsiteSection } from '@/permissions';
 import { getPerformance, type PerformanceParameters } from '@/queries/sql/reports/getPerformance';
 import { getPerformanceMetrics } from '@/queries/sql/reports/getPerformanceMetrics';
 
 export async function POST(request: Request) {
+  return withReportFlow(
+    { report: 'performance', method: 'POST', route: '/api/reports/performance' },
+    async flow => {
+      return handlePerformanceReport(request, flow);
+    },
+  );
+}
+
+async function handlePerformanceReport(request: Request, flow: FlowContext) {
   const { auth, body, error } = await parseRequest(request, reportResultSchema);
+
+  recordValidationOutcome(flow, 'parse_request', !error);
 
   if (error) {
     return error();
@@ -14,7 +26,11 @@ export async function POST(request: Request) {
 
   const { websiteId } = body;
 
-  if (!(await canViewWebsiteSection(auth, websiteId, 'performance'))) {
+  const authorized = await canViewWebsiteSection(auth, websiteId, 'performance');
+
+  recordValidationOutcome(flow, 'authorize', authorized);
+
+  if (!authorized) {
     return unauthorized();
   }
 

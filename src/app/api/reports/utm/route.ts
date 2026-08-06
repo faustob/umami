@@ -1,12 +1,25 @@
 import { UTM_PARAMS } from '@/lib/constants';
+import type { FlowContext } from '@/lib/telemetry';
 import { getQueryFilters, parseRequest, setWebsiteDate } from '@/lib/request';
 import { json, unauthorized } from '@/lib/response';
 import { reportResultSchema } from '@/lib/schema';
+import { recordValidationOutcome, withReportFlow } from '@/lib/telemetry';
 import { canViewWebsiteSection } from '@/permissions';
 import { getUTM, type UTMParameters } from '@/queries/sql';
 
 export async function POST(request: Request) {
+  return withReportFlow(
+    { report: 'utm', method: 'POST', route: '/api/reports/utm' },
+    async flow => {
+      return handleUtmReport(request, flow);
+    },
+  );
+}
+
+async function handleUtmReport(request: Request, flow: FlowContext) {
   const { auth, body, error } = await parseRequest(request, reportResultSchema);
+
+  recordValidationOutcome(flow, 'parse_request', !error);
 
   if (error) {
     return error();
@@ -14,7 +27,11 @@ export async function POST(request: Request) {
 
   const { websiteId } = body;
 
-  if (!(await canViewWebsiteSection(auth, websiteId, 'utm'))) {
+  const authorized = await canViewWebsiteSection(auth, websiteId, 'utm');
+
+  recordValidationOutcome(flow, 'authorize', authorized);
+
+  if (!authorized) {
     return unauthorized();
   }
 

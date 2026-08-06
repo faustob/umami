@@ -1,30 +1,42 @@
 import { getQueryFilters, parseRequest } from '@/lib/request';
 import { json, unauthorized } from '@/lib/response';
 import { reportResultSchema } from '@/lib/schema';
+import { recordValidationOutcome, withReportFlow } from '@/lib/telemetry';
 import { canViewWebsiteSection } from '@/permissions';
 import { getJourney } from '@/queries/sql';
 
 export async function POST(request: Request) {
-  const { auth, body, error } = await parseRequest(request, reportResultSchema);
+  return withReportFlow(
+    { report: 'journey', method: 'POST', route: '/api/reports/journey' },
+    async flow => {
+      const { auth, body, error } = await parseRequest(request, reportResultSchema);
 
-  if (error) {
-    return error();
-  }
+      recordValidationOutcome(flow, 'parse_request', !error);
 
-  const { websiteId, parameters, filters } = body;
-  const { eventType } = parameters;
+      if (error) {
+        return error();
+      }
 
-  if (!(await canViewWebsiteSection(auth, websiteId, 'journeys'))) {
-    return unauthorized();
-  }
+      const { websiteId, parameters, filters } = body;
+      const { eventType } = parameters;
 
-  if (eventType) {
-    filters.eventType = eventType;
-  }
+      const authorized = await canViewWebsiteSection(auth, websiteId, 'journeys');
 
-  const queryFilters = await getQueryFilters(filters, websiteId);
+      recordValidationOutcome(flow, 'authorize', authorized);
 
-  const data = await getJourney(websiteId, parameters, queryFilters);
+      if (!authorized) {
+        return unauthorized();
+      }
 
-  return json(data);
+      if (eventType) {
+        filters.eventType = eventType;
+      }
+
+      const queryFilters = await getQueryFilters(filters, websiteId);
+
+      const data = await getJourney(websiteId, parameters, queryFilters);
+
+      return json(data);
+    },
+  );
 }

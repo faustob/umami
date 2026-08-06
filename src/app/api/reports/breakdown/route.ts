@@ -1,26 +1,38 @@
 import { getQueryFilters, parseRequest, setWebsiteDate } from '@/lib/request';
 import { json, unauthorized } from '@/lib/response';
 import { reportResultSchema } from '@/lib/schema';
+import { recordValidationOutcome, withReportFlow } from '@/lib/telemetry';
 import { canViewWebsiteSection } from '@/permissions';
 import { type BreakdownParameters, getBreakdown } from '@/queries/sql';
 
 export async function POST(request: Request) {
-  const { auth, body, error } = await parseRequest(request, reportResultSchema);
+  return withReportFlow(
+    { report: 'breakdown', method: 'POST', route: '/api/reports/breakdown' },
+    async flow => {
+      const { auth, body, error } = await parseRequest(request, reportResultSchema);
 
-  if (error) {
-    return error();
-  }
+      recordValidationOutcome(flow, 'parse_request', !error);
 
-  const { websiteId } = body;
+      if (error) {
+        return error();
+      }
 
-  if (!(await canViewWebsiteSection(auth, websiteId, 'breakdown'))) {
-    return unauthorized();
-  }
+      const { websiteId } = body;
 
-  const parameters = await setWebsiteDate(websiteId, body.parameters);
-  const filters = await getQueryFilters(body.filters, websiteId);
+      const authorized = await canViewWebsiteSection(auth, websiteId, 'breakdown');
 
-  const data = await getBreakdown(websiteId, parameters as BreakdownParameters, filters);
+      recordValidationOutcome(flow, 'authorize', authorized);
 
-  return json(data);
+      if (!authorized) {
+        return unauthorized();
+      }
+
+      const parameters = await setWebsiteDate(websiteId, body.parameters);
+      const filters = await getQueryFilters(body.filters, websiteId);
+
+      const data = await getBreakdown(websiteId, parameters as BreakdownParameters, filters);
+
+      return json(data);
+    },
+  );
 }

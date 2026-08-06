@@ -2,6 +2,7 @@ import { getCompareDate } from '@/lib/date';
 import { getQueryFilters, parseRequest, setWebsiteDate } from '@/lib/request';
 import { json, unauthorized } from '@/lib/response';
 import { reportResultSchema } from '@/lib/schema';
+import { type FlowContext, recordValidationOutcome, withReportFlow } from '@/lib/telemetry';
 import { canViewWebsiteSection } from '@/permissions';
 import { getRevenueChart, type RevenuParameters } from '@/queries/sql/reports/getRevenueChart';
 import {
@@ -11,7 +12,18 @@ import {
 import { getRevenueStats } from '@/queries/sql/reports/getRevenueStats';
 
 export async function POST(request: Request) {
+  return withReportFlow(
+    { report: 'revenue', method: 'POST', route: '/api/reports/revenue' },
+    async flow => {
+      return handleRevenueReport(request, flow);
+    },
+  );
+}
+
+async function handleRevenueReport(request: Request, flow: FlowContext) {
   const { auth, body, error } = await parseRequest(request, reportResultSchema);
+
+  recordValidationOutcome(flow, 'parse_request', !error);
 
   if (error) {
     return error();
@@ -19,7 +31,11 @@ export async function POST(request: Request) {
 
   const { websiteId } = body;
 
-  if (!(await canViewWebsiteSection(auth, websiteId, 'revenue'))) {
+  const authorized = await canViewWebsiteSection(auth, websiteId, 'revenue');
+
+  recordValidationOutcome(flow, 'authorize', authorized);
+
+  if (!authorized) {
     return unauthorized();
   }
 
