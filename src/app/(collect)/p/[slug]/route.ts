@@ -10,7 +10,6 @@ import {
   flowValidationOutcomes,
   httpServerRequestDuration,
 } from '@/lib/telemetry';
-import type { Pixel } from '@/generated/prisma/client';
 import redis from '@/lib/redis';
 import { notFound } from '@/lib/response';
 import { findPixel } from '@/queries/prisma';
@@ -66,7 +65,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ slug
 
   const { slug } = await params;
 
-  let pixel: Pixel;
+  let pixel: Awaited<ReturnType<typeof findPixel>>;
 
   if (redis.enabled) {
     pixel = await redis.client.fetch(
