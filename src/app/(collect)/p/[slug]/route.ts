@@ -6,7 +6,6 @@ import { POST } from '@/app/api/send/route';
 import {
   flowDuration,
   flowEntries,
-  flowEntryToTerminalDuration,
   flowOutcomes,
   flowValidationOutcomes,
   httpServerRequestDuration,
@@ -46,7 +45,6 @@ export async function GET(request: Request, { params }: { params: Promise<{ slug
 
     flowOutcomes.add(1, attrs);
     flowDuration.record(elapsedSeconds, attrs);
-    flowEntryToTerminalDuration.record(elapsedSeconds, attrs);
     httpServerRequestDuration.record(elapsedSeconds, {
       'http.request.method': 'GET',
       'http.route': HTTP_ROUTE,
