@@ -119,15 +119,16 @@ export async function withReportFlow<T extends Response>(
   options: FlowOptions,
   handler: (flow: FlowContext) => Promise<T>,
 ): Promise<T> {
+  // Typed explicitly so the generic return type survives startActiveSpan's overloads.
   const attributes = baseAttributes(options);
   const entryTime = Date.now();
 
   flowEntries.add(1, attributes);
 
-  return tracer.startActiveSpan(
+  return tracer.startActiveSpan<(span: Span) => Promise<T>>(
     `report.flow ${options.report}`,
     { attributes },
-    async span => {
+    async (span: Span) => {
       const traceId = span.spanContext().traceId;
       const flow: FlowContext = {
         flow: 'dashboard_reporting',
